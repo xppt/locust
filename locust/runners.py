@@ -11,6 +11,7 @@ import gevent
 import six
 from gevent import GreenletExit
 from gevent.pool import Group
+from gevent.event import Event
 
 from six.moves import xrange
 
@@ -40,6 +41,7 @@ class LocustRunner(object):
         self.hatching_greenlet = None
         self.exceptions = {}
         self.stats = global_stats
+        self.stop_event = gevent.event.Event()
         
         # register listener that resets stats when hatching is complete
         def on_hatch_complete(user_count):
@@ -177,8 +179,10 @@ class LocustRunner(object):
         # if we are currently hatching locusts we need to kill the hatching greenlet first
         if self.hatching_greenlet and not self.hatching_greenlet.ready():
             self.hatching_greenlet.kill(block=True)
-        self.locusts.kill(block=True)
+        self.stop_event.set()
+        self.locusts.join()
         self.state = STATE_STOPPED
+        self.stop_event.clear()
         events.locust_stop_hatching.fire()
     
     def quit(self):

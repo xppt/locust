@@ -134,6 +134,7 @@ class Locust(object):
     _setup_has_run = False  # Internal state to see if we have already run
     _teardown_is_set = False  # Internal state to see if we have already run
     _lock = gevent.lock.Semaphore()  # Lock to make sure setup is only run once
+    _stop_event = None
     
     def __init__(self):
         super(Locust, self).__init__()
@@ -155,6 +156,9 @@ class Locust(object):
         cls._teardown_is_set = True
     
     def run(self, runner=None):
+        if runner:
+            self._stop_event = runner.stop_event
+
         task_set_instance = self.task_set(self)
         try:
             task_set_instance.run()
@@ -432,11 +436,13 @@ class TaskSet(object):
         return millis / 1000.0
 
     def wait(self):
-        self._sleep(self.get_wait_secs())
+        wait_secs = self.get_wait_secs()
+        if self.locust._stop_event:
+            if self.locust._stop_event.wait(wait_secs):
+                raise GreenletExit
+        else:
+            gevent.sleep(seconds)
 
-    def _sleep(self, seconds):
-        gevent.sleep(seconds)
-    
     def interrupt(self, reschedule=True):
         """
         Interrupt the TaskSet and hand over execution control back to the parent TaskSet.
